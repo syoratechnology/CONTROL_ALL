@@ -23,8 +23,6 @@ class _DialogoAgregarPagoState extends State<DialogoAgregarPago> {
   DateTime _fechaSeleccionada = DateTime.now();
   String _metodoPago = 'Efectivo';
   
-  final List<String> _metodos = ['Efectivo', 'Tarjeta de Débito', 'Tarjeta de Crédito', 'Transferencia', 'Otro'];
-
   @override
   void initState() {
     super.initState();
@@ -158,13 +156,19 @@ class _DialogoAgregarPagoState extends State<DialogoAgregarPago> {
                 const SizedBox(height: 16),
 
                 // Método de Pago
-                DropdownButtonFormField<String>(
-                  initialValue: _metodoPago,
-                  decoration: const InputDecoration(
-                    labelText: 'Método de pago',
-                  ),
-                  items: _metodos.map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(),
-                  onChanged: (v) => setState(() => _metodoPago = v!),
+                Builder(
+                  builder: (ctx) {
+                    final metodos = ctx.watch<AppProvider>().metodosDePago.toList();
+                    if (!metodos.contains(_metodoPago)) {
+                      metodos.add(_metodoPago);
+                    }
+                    return DropdownButtonFormField<String>(
+                      value: _metodoPago,
+                      decoration: const InputDecoration(labelText: 'Método de pago'),
+                      items: metodos.map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(),
+                      onChanged: (v) => setState(() => _metodoPago = v!),
+                    );
+                  }
                 ),
                 const SizedBox(height: 16),
 

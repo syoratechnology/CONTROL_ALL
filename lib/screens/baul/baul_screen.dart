@@ -140,21 +140,40 @@ class _BaulItemCard extends StatelessWidget {
         color = AppColors.primary;
     }
 
-    return Card(
+    return Container(
       margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Theme.of(context).dividerColor.withValues(alpha: 0.3)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        leading: CircleAvatar(
-          backgroundColor: color.withValues(alpha: 0.1),
-          child: Icon(icon, color: color),
+        leading: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Icon(icon, color: color, size: 24),
         ),
-        title: Text(item.titulo, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
-        subtitle: Text(item.tipo.toUpperCase(), style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1)),
+        title: Text(item.titulo, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, letterSpacing: 0.3)),
+        subtitle: Padding(
+          padding: const EdgeInsets.only(top: 4.0),
+          child: Text(item.tipo.toUpperCase(), style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+        ),
         trailing: PopupMenuButton<String>(
-          icon: const Icon(Icons.more_vert_rounded),
+          icon: Icon(Icons.more_vert_rounded, color: Theme.of(context).disabledColor),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           onSelected: (val) {
             if (val == 'edit') {
-              // Navegamos al detalle para editar profundamente o abrimos diálogo
               Navigator.push(context, MaterialPageRoute(builder: (_) => DetalleItemBaul(item: item)));
             } else if (val == 'delete') {
               _confirmarEliminacionItem(context, item);

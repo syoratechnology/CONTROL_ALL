@@ -27,6 +27,18 @@ class NotificationService {
         // Manejar click en notificación si es necesario
       },
     );
+
+    // Solicitar permisos de notificaciones para Android 13+
+    await _notificationsPlugin
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>()
+        ?.requestNotificationsPermission();
+        
+    // Solicitar permisos de alarmas exactas (Android 14+)
+    await _notificationsPlugin
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>()
+        ?.requestExactAlarmsPermission();
   }
 
   /// Programa una notificación mensual para un gasto fijo
@@ -89,11 +101,48 @@ class NotificationService {
 
   tz.TZDateTime _siguienteInstanciaDiaMes(int dia, int hora, int minuto) {
     final tz.TZDateTime ahora = tz.TZDateTime.now(tz.local);
-    tz.TZDateTime scheduledDate = tz.TZDateTime(tz.local, ahora.year, ahora.month, dia, hora, minuto);
+    int mes = ahora.month;
+    int anio = ahora.year;
+
+    // Ajustar el día si el mes actual tiene menos días (ej. febrero 30 -> febrero 28)
+    int ultimoDiaDelMes = DateTime(anio, mes + 1, 0).day;
+    int diaReal = dia > ultimoDiaDelMes ? ultimoDiaDelMes : dia;
+
+    tz.TZDateTime scheduledDate = tz.TZDateTime(tz.local, anio, mes, diaReal, hora, minuto);
     
+    // Si ya pasó esa fecha/hora este mes, programar para el mes siguiente
     if (scheduledDate.isBefore(ahora)) {
-      scheduledDate = tz.TZDateTime(tz.local, ahora.year, ahora.month + 1, dia, hora, minuto);
+      mes += 1;
+      if (mes > 12) {
+        mes = 1;
+        anio += 1;
+      }
+      int ultimoDiaProximoMes = DateTime(anio, mes + 1, 0).day;
+      int diaRealProximo = dia > ultimoDiaProximoMes ? ultimoDiaProximoMes : dia;
+      
+      scheduledDate = tz.TZDateTime(tz.local, anio, mes, diaRealProximo, hora, minuto);
     }
     return scheduledDate;
+  }
+
+  /// Envía una notificación de prueba en 5 segundos
+  Future<void> mostrarNotificacionPrueba() async {
+    await _notificationsPlugin.zonedSchedule(
+      9999, // ID fijo para la prueba
+      '¡Prueba Exitosa!',
+      'El sistema de notificaciones está funcionando perfectamente.',
+      tz.TZDateTime.now(tz.local).add(const Duration(seconds: 5)),
+      const NotificationDetails(
+        android: AndroidNotificationDetails(
+          'canal_pruebas',
+          'Pruebas del Sistema',
+          channelDescription: 'Canal usado para probar que las notificaciones lleguen',
+          importance: Importance.max,
+          priority: Priority.high,
+        ),
+      ),
+      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+    );
   }
 }

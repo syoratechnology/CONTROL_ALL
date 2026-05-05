@@ -9,6 +9,7 @@ import '../models/deuda.dart';
 import '../models/abono_deuda.dart';
 import '../models/baul_item.dart';
 import '../models/baul_archivo.dart';
+import '../models/tarjeta.dart';
 import '../services/database_service.dart';
 import '../services/notification_service.dart';
 
@@ -38,6 +39,9 @@ class AppProvider extends ChangeNotifier {
   List<BaulCampo> _camposItemActual = [];
   List<BaulArchivo> _archivosItemActual = [];
 
+  // ─── Módulo Tarjetas ───────────────────────────────────────────────────────
+  List<Tarjeta> _tarjetas = [];
+
   // ─── Getters ──────────────────────────────────────────────────────────────
   List<Proyecto> get proyectos   => _proyectos;
   List<Pago>    get pagosActuales => _pagosActuales;
@@ -53,6 +57,14 @@ class AppProvider extends ChangeNotifier {
   List<BaulItem> get baulItems => _baulItems;
   List<BaulCampo> get camposItemActual => _camposItemActual;
   List<BaulArchivo> get archivosItemActual => _archivosItemActual;
+
+  List<Tarjeta> get tarjetas => _tarjetas;
+
+  List<String> get metodosDePago {
+    final metodosBase = ['Efectivo', 'Transferencia'];
+    final nombresTarjetas = _tarjetas.map((t) => t.nombre).toList();
+    return [...metodosBase, ...nombresTarjetas, 'Otro'];
+  }
 
   // ─── Inicialización ───────────────────────────────────────────────────────
 
@@ -72,6 +84,7 @@ class AppProvider extends ChangeNotifier {
     _deudas = await _db.obtenerDeudas();
     
     _baulItems = await _db.obtenerBaulItems();
+    _tarjetas = await _db.obtenerTarjetas();
     
     _cargando = false;
     notifyListeners();
@@ -170,14 +183,14 @@ class AppProvider extends ChangeNotifier {
     final id = await _db.insertarGastoFijo(fijo);
     _gastosFijos = await _db.obtenerGastosFijos();
     
-    // Programar notificación (ID: 1000 + db_id)
+    // Programar notificación (ID: 1000 + db_id) sin bloquear la UI
     if (fijo.activo == 1) {
-      await NotificationService.instance.programarRecordatorioMensual(
+      NotificationService.instance.programarRecordatorioMensual(
         id: 1000 + id,
         titulo: 'Vencimiento de Suscripción',
         cuerpo: 'Mañana toca pagar ${fijo.monto} de ${fijo.nombre}',
         diaMes: fijo.diaCobro - 1 <= 0 ? 28 : fijo.diaCobro - 1, // Avisar 1 día antes
-      );
+      ).catchError((e) => debugPrint('Error programando notificación: $e'));
     }
     
     notifyListeners();
@@ -189,14 +202,15 @@ class AppProvider extends ChangeNotifier {
     
     final notifId = 1000 + fijo.id!;
     if (fijo.activo == 1) {
-      await NotificationService.instance.programarRecordatorioMensual(
+      NotificationService.instance.programarRecordatorioMensual(
         id: notifId,
         titulo: 'Vencimiento de Suscripción',
         cuerpo: 'Mañana toca pagar ${fijo.monto} de ${fijo.nombre}',
         diaMes: fijo.diaCobro - 1 <= 0 ? 28 : fijo.diaCobro - 1,
-      );
+      ).catchError((e) => debugPrint('Error programando notificación: $e'));
     } else {
-      await NotificationService.instance.cancelarNotificacion(notifId);
+      NotificationService.instance.cancelarNotificacion(notifId)
+        .catchError((e) => debugPrint('Error cancelando notificación: $e'));
     }
     
     notifyListeners();
@@ -205,7 +219,8 @@ class AppProvider extends ChangeNotifier {
   Future<void> eliminarGastoFijo(int id) async {
     await _db.eliminarGastoFijo(id);
     _gastosFijos.removeWhere((g) => g.id == id);
-    await NotificationService.instance.cancelarNotificacion(1000 + id);
+    NotificationService.instance.cancelarNotificacion(1000 + id)
+      .catchError((e) => debugPrint('Error cancelando notificación: $e'));
     notifyListeners();
   }
 
@@ -287,12 +302,12 @@ class AppProvider extends ChangeNotifier {
     // Programar recordatorio si hay fecha límite (ID: 2000 + db_id)
     if (deuda.fechaLimite != null) {
       final limit = deuda.fechaLimite!.subtract(const Duration(days: 1));
-      await NotificationService.instance.programarNotificacionUnica(
+      NotificationService.instance.programarNotificacionUnica(
         id: 2000 + id,
         titulo: 'Vencimiento de Préstamo',
         cuerpo: 'Mañana vence el plazo para el préstamo de ${deuda.persona}',
         fecha: DateTime(limit.year, limit.month, limit.day, 10, 0),
-      );
+      ).catchError((e) => debugPrint('Error programando notificación: $e'));
     }
     
     notifyListeners();
@@ -307,7 +322,8 @@ class AppProvider extends ChangeNotifier {
   Future<void> eliminarDeuda(int id) async {
     await _db.eliminarDeuda(id);
     _deudas.removeWhere((d) => d.id == id);
-    await NotificationService.instance.cancelarNotificacion(2000 + id);
+    NotificationService.instance.cancelarNotificacion(2000 + id)
+      .catchError((e) => debugPrint('Error cancelando notificación: $e'));
     notifyListeners();
   }
 
@@ -396,5 +412,57 @@ class AppProvider extends ChangeNotifier {
   Future<void> eliminarArchivoBaul(int id, int itemId) async {
     await _db.eliminarBaulArchivo(id);
     await cargarDetalleItem(itemId);
+  }
+
+  // ─── Módulo Tarjetas ───────────────────────────────────────────────────────
+
+  Future<void> agregarTarjeta(Tarjeta tarjeta) async {
+    final id = await _db.insertarTarjeta(tarjeta);
+    _tarjetas = await _db.obtenerTarjetas();
+    
+    if (tarjeta.tipo == 'Crédito' && tarjeta.diaLimite != null) {
+      int diaAviso = tarjeta.diaLimite! - 2;
+      if (diaAviso <= 0) diaAviso = 28; // fallback
+      
+      NotificationService.instance.programarRecordatorioMensual(
+        id: 2000 + id,
+        titulo: 'Pago de Tarjeta',
+        cuerpo: 'Faltan 2 días para tu fecha límite de pago de ${tarjeta.nombre}.',
+        diaMes: diaAviso,
+      ).catchError((e) => debugPrint('Error programando notificación: $e'));
+    }
+    
+    notifyListeners();
+  }
+
+  Future<void> actualizarTarjeta(Tarjeta tarjeta) async {
+    await _db.actualizarTarjeta(tarjeta);
+    _tarjetas = await _db.obtenerTarjetas();
+    
+    final notifId = 2000 + tarjeta.id!;
+    if (tarjeta.tipo == 'Crédito' && tarjeta.diaLimite != null) {
+      int diaAviso = tarjeta.diaLimite! - 2;
+      if (diaAviso <= 0) diaAviso = 28;
+      
+      NotificationService.instance.programarRecordatorioMensual(
+        id: notifId,
+        titulo: 'Pago de Tarjeta',
+        cuerpo: 'Faltan 2 días para tu fecha límite de pago de ${tarjeta.nombre}.',
+        diaMes: diaAviso,
+      ).catchError((e) => debugPrint('Error programando notificación: $e'));
+    } else {
+      NotificationService.instance.cancelarNotificacion(notifId)
+        .catchError((e) => debugPrint('Error cancelando notificación: $e'));
+    }
+    
+    notifyListeners();
+  }
+
+  Future<void> eliminarTarjeta(int id) async {
+    await _db.eliminarTarjeta(id);
+    _tarjetas = await _db.obtenerTarjetas();
+    NotificationService.instance.cancelarNotificacion(2000 + id)
+      .catchError((e) => debugPrint('Error cancelando notificación: $e'));
+    notifyListeners();
   }
 }

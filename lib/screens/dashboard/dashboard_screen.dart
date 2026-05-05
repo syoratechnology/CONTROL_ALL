@@ -11,11 +11,13 @@ import '../detalle/detalle_screen.dart';
 import '../mensual/detalle_mes_screen.dart';
 import '../deudas/detalle_deuda_screen.dart';
 import '../mensual/gastos_fijos_screen.dart';
+import '../mensual/tarjetas_screen.dart';
 import '../baul/baul_screen.dart';
 import 'widgets/dialogo_nuevo_proyecto.dart';
 import 'widgets/dialogo_nueva_deuda.dart';
+import '../../services/notification_service.dart';
 
-enum ViewType { apartados, elMes, deudas, baul }
+enum ViewType { apartados, elMes, tarjetas, deudas, baul }
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -81,7 +83,7 @@ class _DashboardScreenState extends State<DashboardScreen>
       builder: (ctx) => AlertDialog(
         title: const Text('Respaldo de Datos'),
         content: const Text(
-          'Puedes exportar tus datos para guardarlos en otro lugar o restaurar un respaldo previo.\n\n⚠️ Al restaurar, se borrarán los datos actuales.',
+          'Puedes exportar tus datos para guardarlos en otro lugar o restaurar un respaldo previo.\n\n✅ Todo se guarda: Tarjetas, Apartados, Meses, Préstamos y Bóveda se incluyen automáticamente en el archivo de respaldo.\n\n⚠️ Al restaurar, se sobrescribirán los datos actuales.',
         ),
         actions: [
           Column(
@@ -131,7 +133,15 @@ class _DashboardScreenState extends State<DashboardScreen>
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Mis Finanzas'),
+        title: GestureDetector(
+          onLongPress: () {
+            NotificationService.instance.mostrarNotificacionPrueba();
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Notificación de prueba programada en 5 segundos')),
+            );
+          },
+          child: const Text('Mis Finanzas'),
+        ),
         actions: [
           IconButton(
             icon: Icon(
@@ -183,38 +193,36 @@ class _DashboardScreenState extends State<DashboardScreen>
           ),
         ],
       ),
-      bottomNavigationBar: BottomNavigationBar(
+      bottomNavigationBar: _ModernBottomNavBar(
         currentIndex: ViewType.values.indexOf(_currentView),
         onTap: (index) => setState(() {
           _currentView = ViewType.values[index];
           _showActions = false;
         }),
-        type: BottomNavigationBarType.fixed,
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.folder_rounded), label: 'Apartados'),
-          BottomNavigationBarItem(icon: Icon(Icons.calendar_month_rounded), label: 'Mensual'),
-          BottomNavigationBarItem(icon: Icon(Icons.handshake_rounded), label: 'Préstamos'),
-          BottomNavigationBarItem(icon: Icon(Icons.lock_rounded), label: 'Bóveda'),
-        ],
       ),
       floatingActionButton: _buildFAB(context),
     );
   }
 
   Widget _buildFAB(BuildContext context) {
-    // Si estamos en Apartados o Bóveda, el FAB es simple y directo
-    if (_currentView == ViewType.apartados || _currentView == ViewType.baul) {
+    // Si estamos en Apartados, Bóveda o Tarjetas, el FAB es simple y directo
+    if (_currentView == ViewType.apartados || _currentView == ViewType.baul || _currentView == ViewType.tarjetas) {
       return FloatingActionButton.extended(
         heroTag: 'fab_simple',
         onPressed: () {
           if (_currentView == ViewType.apartados) {
             _mostrarDialogoNuevoProyecto(context);
+          } else if (_currentView == ViewType.tarjetas) {
+            showDialog(
+              context: context,
+              builder: (_) => const DialogoTarjeta(),
+            );
           } else {
             mostrarDialogoNuevoItemBaul(context);
           }
         },
-        icon: const Icon(Icons.add),
-        label: Text(_currentView == ViewType.apartados ? 'Nuevo Apartado' : 'Agregar'),
+        icon: Icon(_currentView == ViewType.tarjetas ? Icons.add_card_rounded : Icons.add),
+        label: Text(_currentView == ViewType.apartados ? 'Nuevo Apartado' : _currentView == ViewType.tarjetas ? 'Agregar Tarjeta' : 'Agregar'),
       );
     }
 
@@ -234,9 +242,10 @@ class _DashboardScreenState extends State<DashboardScreen>
                 setState(() => _showActions = false);
               },
             ),
+            // Se quitó "Mis Tarjetas" de este submenú para moverlo a la barra principal
             const SizedBox(height: 12),
             _SecondaryFab(
-              label: 'Configurar Suscripciones',
+              label: 'Suscripciones',
               icon: Icons.settings_suggest_rounded,
               heroTag: 'fab_settings',
               onTap: () {
@@ -300,6 +309,13 @@ class _DashboardScreenState extends State<DashboardScreen>
 
       if (deudasFiltradas.isEmpty) return const _EmptyState(type: ViewType.deudas);
       return _DeudasList(deudas: deudasFiltradas);
+    } else if (_currentView == ViewType.tarjetas) {
+      final tarjetasFiltradas = provider.tarjetas.where((t) {
+        return t.nombre.toLowerCase().contains(query);
+      }).toList();
+
+      if (tarjetasFiltradas.isEmpty) return const _EmptyState(type: ViewType.tarjetas);
+      return TarjetasScreenContent(tarjetas: tarjetasFiltradas);
     } else {
       return BaulScreenContent(searchQuery: _searchQuery);
     }
@@ -368,6 +384,8 @@ class _EmptyState extends StatelessWidget {
                 ? Icons.folder_open_rounded
                 : type == ViewType.elMes
                 ? Icons.calendar_today_rounded
+                : type == ViewType.tarjetas
+                ? Icons.credit_card_off_rounded
                 : type == ViewType.deudas
                 ? Icons.handshake_rounded
                 : Icons.lock_outline_rounded,
@@ -380,6 +398,8 @@ class _EmptyState extends StatelessWidget {
                 ? 'Sin proyectos todavía'
                 : type == ViewType.elMes
                 ? 'Sin registros mensuales'
+                : type == ViewType.tarjetas
+                ? 'Sin tarjetas registradas'
                 : type == ViewType.deudas
                 ? 'Sin préstamos todavía'
                 : 'La bóveda está vacía',
@@ -393,6 +413,8 @@ class _EmptyState extends StatelessWidget {
                   ? 'Crea uno para empezar a registrar tus gastos.'
                   : type == ViewType.elMes
                   ? 'Crea tu primer mes para gestionar tus suscripciones.'
+                  : type == ViewType.tarjetas
+                  ? 'Registra tus tarjetas de crédito o débito para llevar un mejor control.'
                   : type == ViewType.deudas
                   ? 'Registra tus préstamos o deudas para llevar el control.'
                   : 'Guarda notas, contraseñas o archivos importantes aquí.',
@@ -752,6 +774,87 @@ class _ControlCard extends StatelessWidget {
             child: const Text('Eliminar'),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ModernBottomNavBar extends StatelessWidget {
+  final int currentIndex;
+  final Function(int) onTap;
+
+  const _ModernBottomNavBar({required this.currentIndex, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final items = [
+      {'icon': Icons.folder_rounded, 'label': 'Apartados'},
+      {'icon': Icons.calendar_month_rounded, 'label': 'Mensual'},
+      {'icon': Icons.credit_card_rounded, 'label': 'Tarjetas'},
+      {'icon': Icons.handshake_rounded, 'label': 'Préstamos'},
+      {'icon': Icons.lock_rounded, 'label': 'Bóveda'},
+    ];
+
+    return SafeArea(
+      child: Container(
+        margin: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+        decoration: BoxDecoration(
+          color: Theme.of(context).cardColor,
+          borderRadius: BorderRadius.circular(28),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05),
+              blurRadius: 15,
+              offset: const Offset(0, 5),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: List.generate(items.length, (index) {
+            final isSelected = currentIndex == index;
+            final color = isSelected
+                ? AppColors.primary
+                : Theme.of(context).iconTheme.color?.withValues(alpha: 0.4) ?? Colors.grey;
+
+            return GestureDetector(
+              onTap: () => onTap(index),
+              behavior: HitTestBehavior.opaque,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeOutQuint,
+                padding: EdgeInsets.symmetric(
+                  horizontal: isSelected ? 12.0 : 8.0,
+                  vertical: 8.0,
+                ),
+                decoration: BoxDecoration(
+                  color: isSelected
+                      ? AppColors.primary.withValues(alpha: 0.15)
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(items[index]['icon'] as IconData, color: color, size: 24),
+                    if (isSelected) ...[
+                      const SizedBox(width: 4),
+                      Text(
+                        items[index]['label'] as String,
+                        style: TextStyle(
+                          color: color,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ]
+                  ],
+                ),
+              ),
+            );
+          }),
+        ),
       ),
     );
   }

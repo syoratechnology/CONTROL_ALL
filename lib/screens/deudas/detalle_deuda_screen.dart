@@ -42,7 +42,7 @@ class _DetalleDeudaScreenState extends State<DetalleDeudaScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(deudaActualizada.persona),
+        title: Text('Préstamo: ${deudaActualizada.persona}'),
       ),
       body: provider.cargando
           ? const Center(child: CircularProgressIndicator())
@@ -120,16 +120,47 @@ class _DetalleDeudaScreenState extends State<DetalleDeudaScreen> {
                           itemCount: provider.abonosDeudaActual.length,
                           itemBuilder: (ctx, i) {
                             final abono = provider.abonosDeudaActual[i];
-                            return ListTile(
-                              leading: CircleAvatar(
-                                backgroundColor: color.withValues(alpha: 0.1),
-                                child: Icon(Icons.payment_rounded, color: color, size: 20),
+                            return Container(
+                              margin: const EdgeInsets.only(bottom: 12),
+                              decoration: BoxDecoration(
+                                color: Theme.of(context).cardColor,
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(color: Theme.of(context).dividerColor.withValues(alpha: 0.3)),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.02),
+                                    blurRadius: 5,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
                               ),
-                              title: Text(AppUtils.formatMonto(abono.monto), style: const TextStyle(fontWeight: FontWeight.bold)),
-                              subtitle: Text('${AppUtils.formatFechaCorta(abono.fecha)} ${abono.fecha.hour.toString().padLeft(2, '0')}:${abono.fecha.minute.toString().padLeft(2, '0')}${abono.nota.isNotEmpty ? ' • ${abono.nota}' : ''}'),
-                              trailing: IconButton(
-                                icon: const Icon(Icons.delete_outline_rounded, color: AppColors.danger),
-                                onPressed: () => provider.eliminarAbonoDeuda(abono),
+                              child: ListTile(
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                leading: Container(
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: color.withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Icon(Icons.receipt_long_rounded, color: color, size: 24),
+                                ),
+                                title: Text(
+                                  AppUtils.formatMonto(abono.monto), 
+                                  style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                                ),
+                                subtitle: Padding(
+                                  padding: const EdgeInsets.only(top: 4.0),
+                                  child: Text(
+                                    '${AppUtils.formatFechaCorta(abono.fecha)} ${abono.fecha.hour.toString().padLeft(2, '0')}:${abono.fecha.minute.toString().padLeft(2, '0')}${abono.nota.isNotEmpty ? '\n${abono.nota}' : ''}',
+                                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                      color: Theme.of(context).textTheme.bodySmall?.color,
+                                    ),
+                                  ),
+                                ),
+                                trailing: IconButton(
+                                  icon: const Icon(Icons.delete_outline_rounded, color: AppColors.danger),
+                                  onPressed: () => provider.eliminarAbonoDeuda(abono),
+                                ),
                               ),
                             );
                           },

@@ -5,6 +5,7 @@ import '../../core/theme.dart';
 import '../../core/utils.dart';
 import '../../models/control_mensual.dart';
 import '../../models/gasto_mes.dart';
+import '../../models/tarjeta.dart';
 import '../../providers/app_provider.dart';
 
 class DetalleMesScreen extends StatefulWidget {
@@ -24,10 +25,14 @@ class _DetalleMesScreenState extends State<DetalleMesScreen> {
     });
   }
 
-  void _mostrarDialogoGastoMes(BuildContext context, [GastoMes? existente]) {
+  void _mostrarDialogoGastoMes(BuildContext context, [GastoMes? existente, String? metodoPagoInicial]) {
     showDialog(
       context: context,
-      builder: (_) => DialogoGastoMes(controlId: widget.control.id!, gastoExistente: existente),
+      builder: (_) => DialogoGastoMes(
+        controlId: widget.control.id!, 
+        gastoExistente: existente,
+        metodoPagoInicial: metodoPagoInicial,
+      ),
     );
   }
 
@@ -36,12 +41,28 @@ class _DetalleMesScreenState extends State<DetalleMesScreen> {
     final provider = context.watch<AppProvider>();
     final gastos = provider.gastosMesActual;
 
-    // Cálculos
+    final metodosBase = provider.metodosDePago;
+
+    // Cálculos del mes
     final totalFijos = gastos.where((g) => g.esFijo == 1).fold<double>(0, (s, g) => s + g.monto);
     final totalExtras = gastos.where((g) => g.esFijo == 0).fold<double>(0, (s, g) => s + g.monto);
     final total = totalFijos + totalExtras;
     final totalPagado = gastos.where((g) => g.pagado == 1).fold<double>(0, (s, g) => s + g.monto);
     final pendiente = total - totalPagado;
+
+    // Agrupación de gastos
+    final Map<String, List<GastoMes>> gastosAgrupados = {};
+    for (final m in metodosBase) {
+      gastosAgrupados[m] = [];
+    }
+    for (final g in gastos) {
+      if (gastosAgrupados.containsKey(g.metodoPago)) {
+        gastosAgrupados[g.metodoPago]!.add(g);
+      } else {
+        gastosAgrupados.putIfAbsent(g.metodoPago, () => []).add(g);
+      }
+    }
+    final secciones = gastosAgrupados.entries.where((e) => e.value.isNotEmpty).toList();
 
     return Scaffold(
       appBar: AppBar(
@@ -60,10 +81,16 @@ class _DetalleMesScreenState extends State<DetalleMesScreen> {
                 Expanded(
                   child: ListView.builder(
                     padding: const EdgeInsets.all(16),
-                    itemCount: gastos.length,
+                    itemCount: secciones.length,
                     itemBuilder: (context, index) {
-                      final gasto = gastos[index];
-                      return _GastoMesCard(gasto: gasto, onEdit: () => _mostrarDialogoGastoMes(context, gasto));
+                      final seccion = secciones[index];
+                      return _BloqueMetodoPago(
+                        metodo: seccion.key,
+                        gastos: seccion.value,
+                        control: widget.control,
+                        tarjetas: provider.tarjetas,
+                        onEdit: (g) => _mostrarDialogoGastoMes(context, g),
+                      );
                     },
                   ),
                 ),
@@ -345,8 +372,9 @@ class _GastoMesCard extends StatelessWidget {
 class DialogoGastoMes extends StatefulWidget {
   final int controlId;
   final GastoMes? gastoExistente;
+  final String? metodoPagoInicial;
 
-  const DialogoGastoMes({super.key, required this.controlId, this.gastoExistente});
+  const DialogoGastoMes({super.key, required this.controlId, this.gastoExistente, this.metodoPagoInicial});
 
   @override
   State<DialogoGastoMes> createState() => _DialogoGastoMesState();
@@ -362,11 +390,12 @@ class _DialogoGastoMesState extends State<DialogoGastoMes> {
   String _notas = '';
   int _pagado = 1;
 
-  final _metodos = ['Efectivo', 'Tarjeta de Débito', 'Tarjeta de Crédito', 'Transferencia', 'Otro'];
-
   @override
   void initState() {
     super.initState();
+    if (widget.metodoPagoInicial != null) {
+      _metodoPago = widget.metodoPagoInicial!;
+    }
     if (widget.gastoExistente != null) {
       _nombre = widget.gastoExistente!.nombre;
       _monto = widget.gastoExistente!.monto;
@@ -481,11 +510,19 @@ class _DialogoGastoMesState extends State<DialogoGastoMes> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                DropdownButtonFormField<String>(
-                  initialValue: _metodoPago,
-                  decoration: const InputDecoration(labelText: 'Método de pago'),
-                  items: _metodos.map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(),
-                  onChanged: (v) => setState(() => _metodoPago = v!),
+                Builder(
+                  builder: (ctx) {
+                    final metodos = ctx.watch<AppProvider>().metodosDePago.toList();
+                    if (!metodos.contains(_metodoPago)) {
+                      metodos.add(_metodoPago);
+                    }
+                    return DropdownButtonFormField<String>(
+                      value: _metodoPago,
+                      decoration: const InputDecoration(labelText: 'Método de pago'),
+                      items: metodos.map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(),
+                      onChanged: (v) => setState(() => _metodoPago = v!),
+                    );
+                  }
                 ),
                 const SizedBox(height: 16),
                 Text('Icono', style: Theme.of(context).textTheme.bodySmall),
@@ -533,6 +570,126 @@ class _DialogoGastoMesState extends State<DialogoGastoMes> {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _BloqueMetodoPago extends StatelessWidget {
+  final String metodo;
+  final List<GastoMes> gastos;
+  final ControlMensual control;
+  final List<Tarjeta> tarjetas;
+  final Function(GastoMes) onEdit;
+
+  const _BloqueMetodoPago({
+    required this.metodo,
+    required this.gastos,
+    required this.control,
+    required this.tarjetas,
+    required this.onEdit,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // Buscar si es tarjeta de crédito para fechas
+    Tarjeta? tarjeta;
+    try {
+      tarjeta = tarjetas.firstWhere((t) => t.nombre == metodo && t.tipo == 'Crédito');
+    } catch (_) {}
+
+    String subtitulo = '';
+    if (tarjeta != null && tarjeta.diaCorte != null && tarjeta.diaLimite != null) {
+      const meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+      final mesActual = control.mes;
+      final mesCorte = meses[mesActual - 1];
+      final mesLimite = mesActual == 12 ? meses[0] : meses[mesActual];
+      subtitulo = 'Corte: ${tarjeta.diaCorte} de $mesCorte • Límite: ${tarjeta.diaLimite} de $mesLimite';
+    }
+
+    final total = gastos.fold<double>(0, (s, g) => s + g.monto);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: ExpansionTile(
+          initiallyExpanded: true,
+          backgroundColor: Colors.transparent,
+          collapsedBackgroundColor: Colors.transparent,
+          iconColor: AppColors.primary,
+          collapsedIconColor: Theme.of(context).disabledColor,
+          tilePadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+          shape: const Border(),
+          title: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      metodo.toUpperCase(),
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.primary,
+                        letterSpacing: 1.1,
+                      ),
+                    ),
+                    if (subtitulo.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        subtitulo,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Theme.of(context).textTheme.bodySmall?.color,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ]
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  AppUtils.formatMonto(total),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 14,
+                    color: AppColors.primary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          children: [
+            Container(
+              color: Theme.of(context).scaffoldBackgroundColor.withValues(alpha: 0.5),
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+              child: Column(
+                children: gastos.map((g) => _GastoMesCard(gasto: g, onEdit: () => onEdit(g))).toList(),
+              ),
+            ),
+          ],
         ),
       ),
     );

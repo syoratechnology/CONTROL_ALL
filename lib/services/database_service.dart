@@ -10,6 +10,7 @@ import '../models/deuda.dart';
 import '../models/abono_deuda.dart';
 import '../models/baul_item.dart';
 import '../models/baul_archivo.dart';
+import '../models/tarjeta.dart';
 
 /// Singleton que gestiona toda la base de datos SQLite local de la app.
 class DatabaseService {
@@ -38,7 +39,7 @@ class DatabaseService {
 
     return openDatabase(
       path,
-      version: 6,
+      version: 7,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -75,6 +76,19 @@ class DatabaseService {
     await _crearTablasMensuales(db);
     await _crearTablasDeudas(db);
     await _crearTablasBaul(db);
+    await _crearTablaTarjetas(db);
+  }
+
+  Future<void> _crearTablaTarjetas(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS tarjetas (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nombre TEXT NOT NULL,
+        tipo TEXT NOT NULL,
+        dia_corte INTEGER,
+        dia_limite INTEGER
+      )
+    ''');
   }
 
   Future<void> _crearTablasBaul(Database db) async {
@@ -198,6 +212,9 @@ class DatabaseService {
     if (oldVersion < 6) {
       // Forzar reconstrucción del baúl al nuevo diseño sin carpetas
       await _crearTablasBaul(db);
+    }
+    if (oldVersion < 7) {
+      await _crearTablaTarjetas(db);
     }
   }
 
@@ -505,5 +522,28 @@ class DatabaseService {
   Future<int> eliminarBaulCampo(int id) async {
     final db = await database;
     return db.delete('baul_campos', where: 'id = ?', whereArgs: [id]);
+  }
+
+  // ─── CRUD Tarjetas ────────────────────────────────────────────────────────
+
+  Future<int> insertarTarjeta(Tarjeta tarjeta) async {
+    final db = await database;
+    return db.insert('tarjetas', tarjeta.toMap());
+  }
+
+  Future<List<Tarjeta>> obtenerTarjetas() async {
+    final db = await database;
+    final maps = await db.query('tarjetas', orderBy: 'id ASC');
+    return maps.map(Tarjeta.fromMap).toList();
+  }
+
+  Future<int> actualizarTarjeta(Tarjeta tarjeta) async {
+    final db = await database;
+    return db.update('tarjetas', tarjeta.toMap(), where: 'id = ?', whereArgs: [tarjeta.id]);
+  }
+
+  Future<int> eliminarTarjeta(int id) async {
+    final db = await database;
+    return db.delete('tarjetas', where: 'id = ?', whereArgs: [id]);
   }
 }

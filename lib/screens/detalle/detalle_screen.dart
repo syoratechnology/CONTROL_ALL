@@ -90,39 +90,58 @@ class _DetalleScreenState extends State<DetalleScreen> {
                           itemCount: provider.pagosActuales.length,
                           itemBuilder: (ctx, i) {
                             final pago = provider.pagosActuales[i];
-                            return ListTile(
-                              leading: CircleAvatar(
-                                backgroundColor: color.withValues(alpha: 0.15),
-                                child: Icon(Icons.attach_money_rounded,
-                                    color: color, size: 20),
-                              ),
-                              title: Text(
-                                AppUtils.formatMonto(pago.monto),
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .titleLarge
-                                    ?.copyWith(fontWeight: FontWeight.w700),
-                              ),
-                              subtitle: Text(
-                                '${pago.metodoPago} · ${pago.fecha.day}/${pago.fecha.month}/${pago.fecha.year} ${pago.fecha.hour.toString().padLeft(2, '0')}:${pago.fecha.minute.toString().padLeft(2, '0')}'
-                                '${pago.notas.isNotEmpty ? '\n${pago.notas}' : ''}',
-                                style: Theme.of(context).textTheme.bodyMedium,
-                              ),
-                              isThreeLine: pago.notas.isNotEmpty,
-                              onTap: () {
-                                showDialog(
-                                  context: context,
-                                  builder: (_) => DialogoAgregarPago(
-                                    proyectoId: widget.proyecto.id!,
-                                    pagoExistente: pago,
+                            return Container(
+                              margin: const EdgeInsets.only(bottom: 12),
+                              decoration: BoxDecoration(
+                                color: Theme.of(context).cardColor,
+                                borderRadius: BorderRadius.circular(16),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.03),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 2),
                                   ),
-                                );
-                              },
-                              trailing: IconButton(
-                                icon: const Icon(Icons.delete_outline_rounded,
-                                    color: AppColors.danger),
-                                onPressed: () =>
-                                    provider.eliminarPago(pago.id!),
+                                ],
+                              ),
+                              child: ListTile(
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                leading: Container(
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: color.withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Icon(Icons.attach_money_rounded, color: color, size: 24),
+                                ),
+                                title: Text(
+                                  AppUtils.formatMonto(pago.monto),
+                                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                subtitle: Padding(
+                                  padding: const EdgeInsets.only(top: 4.0),
+                                  child: Text(
+                                    '${pago.metodoPago} • ${pago.fecha.day}/${pago.fecha.month}/${pago.fecha.year}\n${pago.notas}',
+                                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                      color: Theme.of(context).textTheme.bodySmall?.color,
+                                    ),
+                                  ),
+                                ),
+                                isThreeLine: pago.notas.isNotEmpty,
+                                onTap: () {
+                                  showDialog(
+                                    context: context,
+                                    builder: (_) => DialogoAgregarPago(
+                                      proyectoId: widget.proyecto.id!,
+                                      pagoExistente: pago,
+                                    ),
+                                  );
+                                },
+                                trailing: IconButton(
+                                  icon: const Icon(Icons.delete_outline_rounded, color: AppColors.danger),
+                                  onPressed: () => provider.eliminarPago(pago.id!),
+                                ),
                               ),
                             );
                           },
@@ -314,34 +333,54 @@ class _TotalCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
       decoration: BoxDecoration(
         color: Theme.of(context).cardColor,
         borderRadius: const BorderRadius.vertical(bottom: Radius.circular(32)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+            color: color.withValues(alpha: 0.1),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
           ),
         ],
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Text('Total pagado', style: Theme.of(context).textTheme.bodyMedium),
-          const SizedBox(height: 4),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(
+              'Total Pagado',
+              style: TextStyle(
+                color: color,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1.2,
+                fontSize: 12,
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
           Text(
             AppUtils.formatMonto(total),
             style: Theme.of(context).textTheme.displayLarge?.copyWith(
-                  color: color,
-                  fontSize: 36,
-                  fontWeight: FontWeight.w800,
+                  color: Theme.of(context).textTheme.titleLarge?.color,
+                  fontSize: 42,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: -1,
                 ),
           ),
-          const SizedBox(height: 4),
-          Text('$cantidadPagos pago${cantidadPagos != 1 ? 's' : ''} registrado${cantidadPagos != 1 ? 's' : ''}',
-              style: Theme.of(context).textTheme.bodyMedium),
+          const SizedBox(height: 8),
+          Text(
+            '$cantidadPagos pago${cantidadPagos != 1 ? 's' : ''} registrado${cantidadPagos != 1 ? 's' : ''}',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: Theme.of(context).disabledColor,
+            ),
+          ),
         ],
       ),
     );
